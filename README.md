@@ -1,57 +1,106 @@
 # Stan Store Clone
 
-日本のクリエイター向けストアフロントプラットフォーム。
+日本のクリエイター向けストアフロントプラットフォーム。リンク集 + デジタル商品販売 + 決済を1ページで完結。
+
+## デモ
+
+- **ストアフロント**: `https://[your-domain]/[username]`
+- **管理画面**: `https://[your-domain]/admin`
 
 ## 機能
 
 ### ストアフロント（`/[username]`）
 - プロフィール表示（アバター、名前、バイオ）
-- SNSリンク集（ドラッグ&ドロップ順序変更）
+- SNSリンク集
 - デジタル商品カード
 - 1-Tap Checkout（モーダル完結決済）
-- 複数テーマ対応
+- レスポンシブデザイン
 
 ### 管理画面（`/admin`）
 - プロフィール編集
-- リンク管理（CRUD + 順序変更）
-- 商品管理（CRUD + ファイルURL設定）
-- 注文履歴（売上統計付き）
+- リンク管理
+- 商品管理
+- 注文履歴
 - アナリティクス
 - AIアシスタント
 
 ### 決済システム
 - **モック決済**（デフォルト）: Stripe APIキーなしで動作
-- **本番Stripe**: 環境変数設定で切り替え可能
-- Apple Pay / Google Pay 対応
+- **本番Stripe**: 環境変数設定で切り替え
 
-## セットアップ
+## ワンクリックデプロイ
 
-### 1. インストール
+### Vercel + Postgres
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Nisss78/stan-store-clone)
+
+1. 上のボタンをクリック
+2. Vercelアカウントでログイン
+3. Storage → Create Database → Postgres を作成
+4. 環境変数を設定:
+   ```
+   NEXTAUTH_SECRET=<ランダムな文字列>
+   NEXTAUTH_URL=https://<your-project>.vercel.app
+   ```
+5. 再デプロイ
+
+### Railway（SQLite対応）
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/stan-store-clone)
 
 ```bash
+railway login
+railway init
+railway run npm run build
+railley up
+```
+
+### Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Nisss78/stan-store-clone)
+
+### Fly.io
+```bash
+fly launch
+fly deploy
+```
+
+## ローカル開発
+
+### 1. クローン
+
+```bash
+git clone https://github.com/Nisss78/stan-store-clone.git
+cd stan-store-clone
 npm install
 ```
 
-### 2. データベース初期化
+### 2. 環境変数設定
+
+`.env`を作成:
+
+```env
+# SQLite（ローカル開発用）
+DATABASE_URL="file:./dev.db"
+
+# NextAuth
+NEXTAUTH_SECRET="dev-secret-change-in-production"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Stripe（オプション - 未設定ならモック決済）
+STRIPE_SECRET_KEY=""
+STRIPE_PUBLISHABLE_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+
+# モック決済
+USE_MOCK_PAYMENT="true"
+
+# AI（オプション）
+OPENAI_API_KEY=""
+```
+
+### 3. データベース初期化
 
 ```bash
 npx prisma generate
 npx prisma db push
-```
-
-### 3. 環境変数設定
-
-`.env`を編集:
-
-```env
-# モック決済モード（Stripeなしで動作）
-USE_MOCK_PAYMENT="true"
-
-# 本番決済を使う場合
-USE_MOCK_PAYMENT="false"
-STRIPE_SECRET_KEY="sk_test_..."
-STRIPE_PUBLISHABLE_KEY="pk_test_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
 ```
 
 ### 4. 起動
@@ -60,73 +109,58 @@ STRIPE_WEBHOOK_SECRET="whsec_..."
 npm run dev
 ```
 
-## 使い方
+- http://localhost:3000/landing - ランディング
+- http://localhost:3000/register - アカウント作成
+- http://localhost:3000/[username] - ストアフロント
 
-1. **アカウント作成**: `http://localhost:3000/register`
-2. **ログイン**: 管理画面へ自動遷移
-3. **プロフィール設定**: 名前、バイオ、テーマを設定
-4. **リンク追加**: SNSやWebサイトのリンクを追加
-5. **商品追加**: タイトル、価格、ファイルURLを設定
-6. **ストアフロント確認**: `http://localhost:3000/[username]`
+## 環境変数一覧
 
-## 決済フロー
+| 変数名 | 必須 | 説明 |
+|--------|------|------|
+| `DATABASE_URL` | ✅ | データベースURL |
+| `NEXTAUTH_SECRET` | ✅ | NextAuth.js用シークレット |
+| `NEXTAUTH_URL` | ✅ | アプリURL（本番） |
+| `STRIPE_SECRET_KEY` | ❌ | Stripe APIキー |
+| `USE_MOCK_PAYMENT` | ❌ | `true`でモック決済 |
+| `OPENAI_API_KEY` | ❌ | AI機能用 |
 
-### モック決済（デフォルト）
-1. 購入ボタンクリック
-2. メールアドレス入力
-3. 即座に成功画面へ遷移
-4. ダウンロードリンク表示
+## 本番デプロイ時の注意
 
-### 本番Stripe決済
-1. `.env`で`USE_MOCK_PAYMENT="false"`に設定
-2. Stripe APIキーを設定
-3. Webhookエンドポイント: `/api/webhooks/stripe`
+### PostgreSQL推奨
 
-## 技術スタック
+Vercel、Railway、Render等ではPostgreSQLを使用:
 
-- Next.js 14 (App Router)
-- TypeScript
-- Tailwind CSS
-- shadcn/ui (Base UI)
-- Prisma + SQLite
-- NextAuth.js
-- Stripe
-
-## ディレクトリ構成
-
-```
-src/
-├── app/
-│   ├── [username]/       # ストアフロント
-│   ├── admin/            # 管理画面
-│   ├── api/              # API routes
-│   ├── checkout/         # 決済完了ページ
-│   ├── login/            # ログイン
-│   └── register/         # 新規登録
-├── components/
-│   ├── ui/               # UIコンポーネント
-│   └── checkout-modal.tsx
-└── lib/
-    ├── prisma.ts         # DB接続
-    ├── auth.ts           # 認証設定
-    ├── stripe.ts         # Stripe/モック決済
-    └── themes.ts         # テーマ定義
+```prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
 ```
 
-## 本番デプロイ
-
-### Vercel推奨
-
-1. GitHubにプッシュ
-2. Vercelでプロジェクト作成
-3. 環境変数を設定
-4. SQLite → PostgreSQL に変更推奨
-
-### Stripe設定
+### Stripe設定（本番決済）
 
 1. [Stripe Dashboard](https://dashboard.stripe.com/)でAPIキー取得
 2. Webhookエンドポイント作成: `https://your-domain.com/api/webhooks/stripe`
 3. イベント購読: `checkout.session.completed`
+
+```env
+USE_MOCK_PAYMENT="false"
+STRIPE_SECRET_KEY="sk_live_..."
+STRIPE_PUBLISHABLE_KEY="pk_live_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+```
+
+## 技術スタック
+
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **UI**: shadcn/ui
+- **Database**: Prisma + PostgreSQL/SQLite
+- **Auth**: NextAuth.js
+- **Payment**: Stripe
+- **Hosting**: Vercel / Railway / Render / Fly.io
 
 ## ライセンス
 
