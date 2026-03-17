@@ -60,6 +60,7 @@ export default async function StorefrontPage({ params }: PageProps) {
     avatarUrl: user.avatarUrl ?? null,
     themeColor: user.themeColor ?? null,
     themeName: user.themeName ?? null,
+    productLayout: user.productLayout ?? null,
     twitterUrl: user.twitterUrl ?? null,
     instagramUrl: user.instagramUrl ?? null,
     youtubeUrl: user.youtubeUrl ?? null,
