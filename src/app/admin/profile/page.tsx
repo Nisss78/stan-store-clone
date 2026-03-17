@@ -3,13 +3,15 @@
 import { useQuery, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExternalLink, Eye, EyeOff, Copy, Check, Camera, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ExternalLink, Eye, EyeOff, Copy, Check, Camera, X, Save } from "lucide-react";
+import { toast } from "sonner";
 
 export default function AdminProfilePage() {
   const { user: clerkUser, isLoaded } = useUser();
@@ -23,6 +25,8 @@ export default function AdminProfilePage() {
   const [copied, setCopied] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [autoSave, setAutoSave] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     name: "",
@@ -34,12 +38,16 @@ export default function AdminProfilePage() {
     tiktokUrl: "",
     websiteUrl: "",
   });
-  const [saving, setSaving] = useState(false);
+  const [originalData, setOriginalData] = useState(formData);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if form has unsaved changes
+  const isDirty = JSON.stringify(formData) !== JSON.stringify(originalData);
 
   useEffect(() => {
     if (convexUser) {
-      setFormData({
+      const data = {
         username: convexUser.username || "",
         name: convexUser.name || "",
         bio: convexUser.bio || "",
@@ -49,9 +57,42 @@ export default function AdminProfilePage() {
         youtubeUrl: convexUser.youtubeUrl || "",
         tiktokUrl: convexUser.tiktokUrl || "",
         websiteUrl: convexUser.websiteUrl || "",
-      });
+      };
+      setFormData(data);
+      setOriginalData(data);
     }
   }, [convexUser]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  // Auto-save when enabled and form is dirty
+  useEffect(() => {
+    if (autoSave && isDirty && !saving) {
+      // Clear existing timer
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      // Set new timer (3 seconds after last change)
+      autoSaveTimerRef.current = setTimeout(() => {
+        handleSave(true);
+      }, 3000);
+    }
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [formData, autoSave, isDirty]);
 
   // 画像をリサイズしてBase64に変換
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +101,7 @@ export default function AdminProfilePage() {
 
     // ファイルサイズチェック（5MB以下）
     if (file.size > 5 * 1024 * 1024) {
-      alert("画像は5MB以下にしてください");
+      toast.error("画像は5MB以下にしてください");
       return;
     }
 
@@ -102,28 +143,36 @@ export default function AdminProfilePage() {
       reader.readAsDataURL(file);
     } catch (error) {
       console.error("画像のアップロードに失敗しました", error);
-      alert("画像のアップロードに失敗しました");
+      toast.error("画像のアップロードに失敗しました");
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async (isAutoSave = false) => {
     if (!clerkUser?.id) return;
+    
     setSaving(true);
-    setSaved(false);
     try {
       await updateProfile({
         clerkId: clerkUser.id,
         ...formData,
       });
-      setSaved(true);
-      setPreviewKey((k) => k + 1); // Reload preview
-      setTimeout(() => setSaved(false), 3000);
+      setOriginalData(formData);
+      setPreviewKey((k) => k + 1);
+      
+      if (isAutoSave) {
+        toast.success("自動保存しました");
+      } else {
+        setSaved(true);
+        toast.success("保存しました");
+        setTimeout(() => setSaved(false), 3000);
+      }
     } catch (error) {
       console.error(error);
+      toast.error("保存に失敗しました");
     } finally {
       setSaving(false);
     }
-  };
+  }, [clerkUser?.id, formData, updateProfile]);
 
   const storeUrl = convexUser
     ? `${window.location.origin}/${formData.username || convexUser.username}`
@@ -156,16 +205,57 @@ export default function AdminProfilePage() {
               ストアフロントの表示をカスタマイズ
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            className="lg:hidden"
-          >
-            {showPreview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            {showPreview ? "プレビュー非表示" : "プレビュー"}
-          </Button>
+          <div className="flex items-center gap-4">
+            {/* Unsaved indicator */}
+            {isDirty && !saving && (
+              <div className="flex items-center gap-2 text-sm text-amber-600">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                未保存の変更があります
+              </div>
+            )}
+            {saving && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                保存中...
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className="lg:hidden"
+            >
+              {showPreview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              {showPreview ? "プレビュー非表示" : "プレビュー"}
+            </Button>
+          </div>
         </div>
+
+        {/* Auto-save toggle */}
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="auto-save"
+                  checked={autoSave}
+                  onCheckedChange={setAutoSave}
+                />
+                <Label htmlFor="auto-save" className="cursor-pointer">
+                  自動保存（3秒後に保存）
+                </Label>
+              </div>
+              <Button
+                onClick={() => handleSave(false)}
+                disabled={saving || !isDirty}
+                size="sm"
+              >
+                <Save className="h-4 w-4 mr-1" />
+                {saving ? "保存中..." : saved ? "保存済み" : "保存する"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Store URL Card */}
         <Card>
@@ -345,10 +435,10 @@ export default function AdminProfilePage() {
         </Card>
 
         <div className="flex items-center gap-4">
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={() => handleSave(false)} disabled={saving || !isDirty}>
             {saving ? "保存中..." : "保存する"}
           </Button>
-          {saved && (
+          {saved && !autoSave && (
             <span className="text-sm text-green-600">✓ 保存しました</span>
           )}
         </div>
