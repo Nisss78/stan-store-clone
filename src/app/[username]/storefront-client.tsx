@@ -33,6 +33,7 @@ type SerializedLink = {
   url: string;
   order: number;
   icon: string | null;
+  iconUrl: string | null;
   isActive: boolean;
 };
 
@@ -251,9 +252,22 @@ export default function StorefrontClient({ user, links, products }: Props) {
                     isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700" : "bg-white"
                   )}
                 >
-                  <span className="font-medium text-sm">
-                    {link.icon ? `${link.icon} ` : ""}{link.title}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {/* アイコン画像または絵文字 */}
+                    {link.iconUrl ? (
+                      <div className="h-6 w-6 overflow-hidden rounded">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={link.iconUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : link.icon ? (
+                      <span className="text-lg">{link.icon}</span>
+                    ) : null}
+                    <span className="font-medium text-sm">{link.title}</span>
+                  </div>
                   <ExternalLink className="h-4 w-4 text-muted-foreground" />
                 </a>
               ))}

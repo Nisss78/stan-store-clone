@@ -28,6 +28,7 @@ export default defineSchema({
     url: v.string(),
     order: v.number(),
     icon: v.optional(v.string()),
+    iconUrl: v.optional(v.string()),
     isActive: v.boolean(),
   }).index("by_userId", ["userId"]),
 

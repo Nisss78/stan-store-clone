@@ -73,6 +73,7 @@ export default async function StorefrontPage({ params }: PageProps) {
     url: link.url,
     order: link.order,
     icon: link.icon ?? null,
+    iconUrl: link.iconUrl ?? null,
     isActive: link.isActive,
   }));
 

@@ -31,6 +31,7 @@ export const create = mutation({
     title: v.string(),
     url: v.string(),
     icon: v.optional(v.string()),
+    iconUrl: v.optional(v.string()),
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -45,6 +46,7 @@ export const create = mutation({
       title: args.title,
       url: args.url,
       icon: args.icon,
+      iconUrl: args.iconUrl,
       isActive: args.isActive,
       order: maxOrder + 1,
     });
@@ -59,6 +61,7 @@ export const update = mutation({
     title: v.optional(v.string()),
     url: v.optional(v.string()),
     icon: v.optional(v.string()),
+    iconUrl: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
     order: v.optional(v.number()),
   },

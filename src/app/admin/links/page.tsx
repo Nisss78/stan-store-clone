@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
@@ -27,7 +27,10 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  Camera,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface LinkItem {
   _id: Id<"links">;
@@ -35,6 +38,7 @@ interface LinkItem {
   url: string;
   order: number;
   icon?: string;
+  iconUrl?: string;
   isActive: boolean;
 }
 
@@ -42,6 +46,7 @@ interface LinkFormData {
   title: string;
   url: string;
   icon: string;
+  iconUrl: string;
   isActive: boolean;
 }
 
@@ -49,7 +54,15 @@ const emptyForm: LinkFormData = {
   title: "",
   url: "",
   icon: "",
+  iconUrl: "",
   isActive: true,
+};
+
+// 文字数制限
+const LIMITS = {
+  title: 30,
+  url: 500,
+  icon: 10,
 };
 
 export default function LinksPage() {
@@ -73,9 +86,9 @@ export default function LinksPage() {
   const [formData, setFormData] = useState<LinkFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"links"> | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [previewKey, setPreviewKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loading = !convexUser || links === undefined;
   const storeUrl = convexUser
@@ -94,14 +107,73 @@ export default function LinksPage() {
       title: link.title,
       url: link.url,
       icon: link.icon ?? "",
+      iconUrl: link.iconUrl ?? "",
       isActive: link.isActive,
     });
     setDialogOpen(true);
   }
 
   function handleFormChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    
+    // 文字数制限
+    if (name === "title" && value.length > LIMITS.title) return;
+    if (name === "url" && value.length > LIMITS.url) return;
+    if (name === "icon" && value.length > LIMITS.icon) return;
+    
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
+
+  // 画像をリサイズしてBase64に変換
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("画像は5MB以下にしてください");
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 64; // アイコンは小さく
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height *= maxSize / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width *= maxSize / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          const base64 = canvas.toDataURL("image/jpeg", 0.8);
+          setFormData((prev) => ({ ...prev, iconUrl: base64 }));
+          toast.success("画像をアップロードしました");
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("画像のアップロードに失敗しました", error);
+      toast.error("画像のアップロードに失敗しました");
+    }
+  };
 
   async function handleSave() {
     if (!formData.title.trim() || !formData.url.trim() || !convexUser) return;
@@ -115,22 +187,27 @@ export default function LinksPage() {
           title: formData.title,
           url: formData.url,
           icon: formData.icon || undefined,
+          iconUrl: formData.iconUrl || undefined,
           isActive: formData.isActive,
         });
+        toast.success("更新しました");
       } else {
         await createLink({
           userId: convexUser._id,
           title: formData.title,
           url: formData.url,
           icon: formData.icon || undefined,
+          iconUrl: formData.iconUrl || undefined,
           isActive: formData.isActive,
         });
+        toast.success("追加しました");
       }
 
+      setPreviewKey((k) => k + 1);
       setDialogOpen(false);
     } catch (err) {
       console.error(err);
-      setError("保存に失敗しました");
+      toast.error("保存に失敗しました");
     } finally {
       setSaving(false);
     }
@@ -141,9 +218,11 @@ export default function LinksPage() {
     setDeletingId(id);
     try {
       await removeLink({ id, userId: convexUser._id });
+      toast.success("削除しました");
+      setPreviewKey((k) => k + 1);
     } catch (err) {
       console.error(err);
-      setError("削除に失敗しました");
+      toast.error("削除に失敗しました");
     } finally {
       setDeletingId(null);
     }
@@ -159,7 +238,7 @@ export default function LinksPage() {
       });
     } catch (err) {
       console.error(err);
-      setError("更新に失敗しました");
+      toast.error("更新に失敗しました");
     }
   }
 
@@ -179,7 +258,7 @@ export default function LinksPage() {
       });
     } catch (err) {
       console.error(err);
-      setError("並び順の保存に失敗しました");
+      toast.error("並び順の保存に失敗しました");
     }
   }
 
@@ -222,8 +301,66 @@ export default function LinksPage() {
                   <DialogTitle>{editingLink ? "リンクを編集" : "リンクを追加"}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
+                  {/* アイコン画像アップロード */}
+                  <div className="space-y-2">
+                    <Label>アイコン画像</Label>
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        {formData.iconUrl ? (
+                          <div className="relative h-12 w-12 overflow-hidden rounded-lg">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={formData.iconUrl}
+                              alt="アイコンプレビュー"
+                              className="h-full w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setFormData((prev) => ({ ...prev, iconUrl: "" }))}
+                              className="absolute -right-1 -top-1 rounded-full bg-destructive p-1 text-white hover:bg-destructive/90"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-muted/50 transition-colors"
+                          >
+                            <Camera className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          画像をアップロード
+                        </Button>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          または絵文字を使用
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
-                    <Label htmlFor="link-title">タイトル</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="link-title">タイトル</Label>
+                      <span className="text-xs text-muted-foreground">
+                        {formData.title.length}/{LIMITS.title}
+                      </span>
+                    </div>
                     <Input
                       id="link-title"
                       name="title"
@@ -234,7 +371,12 @@ export default function LinksPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="link-url">URL</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="link-url">URL</Label>
+                      <span className="text-xs text-muted-foreground">
+                        {formData.url.length}/{LIMITS.url}
+                      </span>
+                    </div>
                     <Input
                       id="link-url"
                       name="url"
@@ -245,7 +387,12 @@ export default function LinksPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="link-icon">アイコン (任意)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="link-icon">絵文字アイコン（任意）</Label>
+                      <span className="text-xs text-muted-foreground">
+                        {formData.icon.length}/{LIMITS.icon}
+                      </span>
+                    </div>
                     <Input
                       id="link-icon"
                       name="icon"
@@ -253,6 +400,9 @@ export default function LinksPage() {
                       onChange={handleFormChange}
                       placeholder="例：🔗"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      画像をアップロードした場合は画像が優先されます
+                    </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <Switch
@@ -277,18 +427,6 @@ export default function LinksPage() {
             </Dialog>
           </div>
         </div>
-
-        {error && (
-          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 underline hover:no-underline"
-            >
-              閉じる
-            </button>
-          </div>
-        )}
 
         {links.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed bg-muted/30 py-16 text-center">
@@ -328,7 +466,19 @@ export default function LinksPage() {
                   </Button>
                 </div>
 
-                {link.icon && <span className="text-lg leading-none">{link.icon}</span>}
+                {/* アイコン表示 */}
+                {link.iconUrl ? (
+                  <div className="h-6 w-6 overflow-hidden rounded">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={link.iconUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : link.icon ? (
+                  <span className="text-lg leading-none">{link.icon}</span>
+                ) : null}
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{link.title}</p>
