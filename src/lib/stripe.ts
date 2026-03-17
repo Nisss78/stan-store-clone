@@ -11,9 +11,7 @@ export function getStripe() {
   }
 
   if (!stripeClient) {
-    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-02-25.clover",
-    });
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!);
   }
 
   return stripeClient;
