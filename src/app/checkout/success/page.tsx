@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getConvexClient } from "@/lib/convex";
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
 import { notFound } from "next/navigation";
 import { CheckCircle, Download, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,13 +32,9 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
     );
   }
 
-  const order = await prisma.order.findUnique({
-    where: { id: order_id },
-    include: {
-      product: {
-        include: { user: true },
-      },
-    },
+  const convex = getConvexClient();
+  const order = await convex.query(api.orders.getById, {
+    id: order_id as Id<"orders">,
   });
 
   if (!order) {
@@ -100,8 +98,8 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
           {/* 注文情報 */}
           <div className="text-sm text-muted-foreground">
-            <p>注文番号: {order.id}</p>
-            <p>購入日: {new Date(order.createdAt).toLocaleString("ja-JP")}</p>
+            <p>注文番号: {order._id}</p>
+            <p>購入日: {new Date(order._creationTime).toLocaleString("ja-JP")}</p>
           </div>
         </div>
 

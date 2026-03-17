@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
 import {
   Dialog,
   DialogContent,
@@ -21,15 +25,15 @@ import {
 } from "lucide-react";
 
 interface Product {
-  id: string;
+  _id: Id<"products">;
   title: string;
-  description: string | null;
+  description?: string;
   price: number;
   currency: string;
-  thumbnailUrl: string | null;
-  fileUrl: string | null;
+  thumbnailUrl?: string;
+  fileUrl?: string;
   isActive: boolean;
-  createdAt: string;
+  _creationTime: number;
 }
 
 interface ProductFormData {
@@ -56,6 +60,7 @@ interface ProductFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: Product | null;
+  userId: Id<"users">;
   onSaved: () => void;
 }
 
@@ -63,12 +68,16 @@ function ProductFormDialog({
   open,
   onOpenChange,
   initialData,
+  userId,
   onSaved,
 }: ProductFormDialogProps) {
   const isEditing = Boolean(initialData);
   const [form, setForm] = useState<ProductFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const createProduct = useMutation(api.products.create);
+  const updateProduct = useMutation(api.products.update);
 
   useEffect(() => {
     if (open) {
@@ -111,36 +120,32 @@ function ProductFormDialog({
     setSaving(true);
 
     try {
-      const payload = {
-        title: form.title.trim(),
-        description: form.description.trim() || null,
-        price: parsedPrice,
-        thumbnailUrl: form.thumbnailUrl.trim() || null,
-        fileUrl: form.fileUrl.trim() || null,
-      };
-
-      const url = isEditing
-        ? `/api/admin/products/${initialData!.id}`
-        : "/api/admin/products";
-      const method = isEditing ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "エラーが発生しました。");
-        return;
+      if (isEditing && initialData) {
+        await updateProduct({
+          id: initialData._id,
+          userId,
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          price: parsedPrice,
+          thumbnailUrl: form.thumbnailUrl.trim() || undefined,
+          fileUrl: form.fileUrl.trim() || undefined,
+        });
+      } else {
+        await createProduct({
+          userId,
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          price: parsedPrice,
+          currency: "JPY",
+          thumbnailUrl: form.thumbnailUrl.trim() || undefined,
+          fileUrl: form.fileUrl.trim() || undefined,
+        });
       }
 
       onSaved();
       onOpenChange(false);
     } catch {
-      setError("ネットワークエラーが発生しました。");
+      setError("エラーが発生しました。");
     } finally {
       setSaving(false);
     }
@@ -244,6 +249,7 @@ interface DeleteConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: Product;
+  userId: Id<"users">;
   onDeleted: () => void;
 }
 
@@ -251,27 +257,22 @@ function DeleteConfirmDialog({
   open,
   onOpenChange,
   product,
+  userId,
   onDeleted,
 }: DeleteConfirmDialogProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const removeProduct = useMutation(api.products.remove);
 
   async function handleDelete() {
     setDeleting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/products/${product.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "削除中にエラーが発生しました。");
-        return;
-      }
+      await removeProduct({ id: product._id, userId });
       onDeleted();
       onOpenChange(false);
     } catch {
-      setError("ネットワークエラーが発生しました。");
+      setError("削除中にエラーが発生しました。");
     } finally {
       setDeleting(false);
     }
@@ -311,36 +312,33 @@ function DeleteConfirmDialog({
 }
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const products = useQuery(
+    api.products.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  ) as Product[] | undefined;
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const res = await fetch("/api/admin/products");
-      if (!res.ok) {
-        const data = await res.json();
-        setFetchError(data.error || "商品の取得に失敗しました。");
-        return;
-      }
-      const data = await res.json();
-      setProducts(data);
-    } catch {
-      setFetchError("ネットワークエラーが発生しました。");
-    } finally {
-      setLoading(false);
-    }
+  const loading = !convexUser || products === undefined;
+
+  const handleSaved = useCallback(() => {
+    // Convex auto-refreshes queries
   }, []);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -361,22 +359,8 @@ export default function AdminProductsPage() {
         </Button>
       </div>
 
-      {/* Error state */}
-      {fetchError && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {fetchError}
-        </div>
-      )}
-
-      {/* Loading state */}
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
       {/* Empty state */}
-      {!loading && !fetchError && products.length === 0 && (
+      {products.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
           <ShoppingBagIcon className="size-10 text-muted-foreground/50" />
           <div>
@@ -397,11 +381,11 @@ export default function AdminProductsPage() {
       )}
 
       {/* Product grid */}
-      {!loading && products.length > 0 && (
+      {products.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
             <div
-              key={product.id}
+              key={product._id}
               className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-sm"
             >
               {/* Thumbnail */}
@@ -476,7 +460,8 @@ export default function AdminProductsPage() {
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
         initialData={null}
-        onSaved={fetchProducts}
+        userId={convexUser._id}
+        onSaved={handleSaved}
       />
 
       {/* Edit dialog */}
@@ -487,7 +472,8 @@ export default function AdminProductsPage() {
             if (!open) setEditingProduct(null);
           }}
           initialData={editingProduct}
-          onSaved={fetchProducts}
+          userId={convexUser._id}
+          onSaved={handleSaved}
         />
       )}
 
@@ -499,7 +485,8 @@ export default function AdminProductsPage() {
             if (!open) setDeletingProduct(null);
           }}
           product={deletingProduct}
-          onDeleted={fetchProducts}
+          userId={convexUser._id}
+          onDeleted={handleSaved}
         />
       )}
     </div>

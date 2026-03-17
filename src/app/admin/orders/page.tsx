@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
 import {
   Card,
   CardContent,
@@ -16,54 +18,43 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShoppingBag, Eye, Mail, Calendar, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 type Order = {
-  id: string;
+  _id: string;
   buyerEmail: string;
-  buyerName: string | null;
+  buyerName?: string;
   amount: number;
   currency: string;
   status: string;
-  createdAt: string;
+  _creationTime: number;
   product: {
     id: string;
     title: string;
-    thumbnailUrl: string | null;
-  };
+    thumbnailUrl?: string;
+  } | null;
 };
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const orders = useQuery(
+    api.orders.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  ) as Order[] | undefined;
+
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  async function fetchOrders() {
-    try {
-      const res = await fetch("/api/admin/orders");
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data);
-      }
-    } catch (error) {
-      console.error("注文履歴の取得に失敗しました:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = !convexUser || orders === undefined;
 
   const statusLabels: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
     pending: { label: "処理中", variant: "secondary" },
     completed: { label: "完了", variant: "default" },
     cancelled: { label: "キャンセル", variant: "destructive" },
   };
-
-  const totalRevenue = orders
-    .filter((o) => o.status === "completed")
-    .reduce((sum, o) => sum + o.amount, 0);
 
   if (loading) {
     return (
@@ -72,6 +63,10 @@ export default function AdminOrdersPage() {
       </div>
     );
   }
+
+  const totalRevenue = orders
+    .filter((o) => o.status === "completed")
+    .reduce((sum, o) => sum + o.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -132,11 +127,10 @@ export default function AdminOrdersPage() {
             <div className="divide-y">
               {orders.map((order) => (
                 <div
-                  key={order.id}
+                  key={order._id}
                   className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
                 >
-                  {/* 商品画像 */}
-                  {order.product.thumbnailUrl ? (
+                  {order.product?.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={order.product.thumbnailUrl}
@@ -149,15 +143,13 @@ export default function AdminOrdersPage() {
                     </div>
                   )}
 
-                  {/* 注文情報 */}
                   <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium">{order.product.title}</p>
+                    <p className="truncate font-medium">{order.product?.title ?? "不明な商品"}</p>
                     <p className="text-sm text-muted-foreground">
                       {order.buyerEmail}
                     </p>
                   </div>
 
-                  {/* 金額・ステータス */}
                   <div className="flex items-center gap-3">
                     <p className="font-semibold">¥{order.amount.toLocaleString("ja-JP")}</p>
                     <Badge variant={statusLabels[order.status]?.variant || "secondary"}>
@@ -165,7 +157,6 @@ export default function AdminOrdersPage() {
                     </Badge>
                   </div>
 
-                  {/* 詳細ボタン */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -189,9 +180,8 @@ export default function AdminOrdersPage() {
 
           {selectedOrder && (
             <div className="space-y-4">
-              {/* 商品情報 */}
               <div className="flex items-center gap-3 rounded-lg border p-3">
-                {selectedOrder.product.thumbnailUrl ? (
+                {selectedOrder.product?.thumbnailUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={selectedOrder.product.thumbnailUrl}
@@ -204,14 +194,13 @@ export default function AdminOrdersPage() {
                   </div>
                 )}
                 <div>
-                  <p className="font-medium">{selectedOrder.product.title}</p>
+                  <p className="font-medium">{selectedOrder.product?.title ?? "不明"}</p>
                   <p className="text-lg font-bold text-primary">
                     ¥{selectedOrder.amount.toLocaleString("ja-JP")}
                   </p>
                 </div>
               </div>
 
-              {/* 購入者情報 */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <Mail className="size-4 text-muted-foreground" />
@@ -225,12 +214,11 @@ export default function AdminOrdersPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="size-4 text-muted-foreground" />
                   <span>
-                    {new Date(selectedOrder.createdAt).toLocaleString("ja-JP")}
+                    {new Date(selectedOrder._creationTime).toLocaleString("ja-JP")}
                   </span>
                 </div>
               </div>
 
-              {/* ステータス */}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">ステータス</span>
                 <Badge variant={statusLabels[selectedOrder.status]?.variant || "secondary"}>
@@ -238,9 +226,8 @@ export default function AdminOrdersPage() {
                 </Badge>
               </div>
 
-              {/* 注文ID */}
               <p className="text-xs text-muted-foreground">
-                注文ID: {selectedOrder.id}
+                注文ID: {selectedOrder._id}
               </p>
             </div>
           )}

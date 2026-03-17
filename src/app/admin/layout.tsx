@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -56,9 +55,9 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const user = await currentUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
@@ -76,7 +75,7 @@ export default async function AdminLayout({
         </div>
         <div className="border-t p-4">
           <p className="truncate text-xs text-muted-foreground">
-            {session.user?.email}
+            {user.emailAddresses[0]?.emailAddress}
           </p>
         </div>
       </aside>

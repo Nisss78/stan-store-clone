@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { prisma } from "@/lib/prisma";
+import { getConvexClient } from "@/lib/convex";
+import { api } from "../../../../../convex/_generated/api";
+import { Id } from "../../../../../convex/_generated/dataModel";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -38,6 +40,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const convex = getConvexClient();
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -49,12 +53,10 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        await prisma.order.update({
-          where: { id: orderId },
-          data: {
-            status: "completed",
-            stripePaymentId: session.payment_intent as string ?? session.id,
-          },
+        await convex.mutation(api.orders.updateStatus, {
+          id: orderId as Id<"orders">,
+          status: "completed",
+          stripePaymentId: (session.payment_intent as string) ?? session.id,
         });
 
         console.log(`Order ${orderId} marked as completed.`);
@@ -66,16 +68,15 @@ export async function POST(request: NextRequest) {
         const orderId = session.metadata?.orderId;
 
         if (orderId) {
-          await prisma.order.update({
-            where: { id: orderId },
-            data: { status: "expired" },
+          await convex.mutation(api.orders.updateStatus, {
+            id: orderId as Id<"orders">,
+            status: "expired",
           });
         }
         break;
       }
 
       default:
-        // Unhandled event type — ignore
         break;
     }
 

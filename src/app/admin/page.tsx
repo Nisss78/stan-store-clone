@@ -1,49 +1,62 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../convex/_generated/api";
 import { Link as LinkIcon, ShoppingBag, ShoppingCart } from "lucide-react";
 
-export default async function AdminDashboardPage() {
-  const session = await getServerSession(authOptions);
+export default function AdminDashboardPage() {
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const links = useQuery(
+    api.links.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
+  const products = useQuery(
+    api.products.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
+  const orders = useQuery(
+    api.orders.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
 
-  if (!session?.user?.id) {
-    redirect("/login");
+  if (!convexUser || links === undefined || products === undefined || orders === undefined) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <span className="text-sm text-muted-foreground">読み込み中...</span>
+      </div>
+    );
   }
-
-  const userId = session.user.id;
-
-  const [linksCount, productsCount, ordersCount] = await Promise.all([
-    prisma.link.count({ where: { userId } }),
-    prisma.product.count({ where: { userId } }),
-    prisma.order.count({ where: { userId } }),
-  ]);
 
   const stats = [
     {
       label: "リンク",
-      value: linksCount,
+      value: links.length,
       icon: LinkIcon,
       href: "/admin/links",
       color: "bg-blue-50 text-blue-600",
     },
     {
       label: "商品",
-      value: productsCount,
+      value: products.length,
       icon: ShoppingBag,
       href: "/admin/products",
       color: "bg-violet-50 text-violet-600",
     },
     {
       label: "注文",
-      value: ordersCount,
+      value: orders.length,
       icon: ShoppingCart,
       href: "/admin/analytics",
       color: "bg-emerald-50 text-emerald-600",
     },
   ];
 
-  const displayName = session.user.name || session.user.email || "ユーザー";
+  const displayName = convexUser.name || clerkUser?.emailAddresses[0]?.emailAddress || "ユーザー";
 
   return (
     <div className="space-y-6">

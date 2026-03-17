@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
 import {
   Card,
   CardContent,
@@ -8,23 +10,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Eye, MousePointerClick, ShoppingCart, TrendingUp } from "lucide-react";
-
-type AnalyticsEvent = {
-  id: string;
-  eventType: string;
-  metadata: string | null;
-  createdAt: string;
-};
-
-type AnalyticsData = {
-  counts: {
-    pageViews: number;
-    linkClicks: number;
-    orders: number;
-  };
-  totalRevenue: number;
-  recentEvents: AnalyticsEvent[];
-};
 
 function eventTypeLabel(eventType: string): string {
   switch (eventType) {
@@ -51,39 +36,22 @@ function formatDate(dateString: string): string {
 }
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const data = useQuery(
+    api.analyticsFns.getStats,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
 
-  useEffect(() => {
-    fetch("/api/admin/analytics")
-      .then((res) => {
-        if (!res.ok) throw new Error("データの取得に失敗しました");
-        return res.json();
-      })
-      .then((json: AnalyticsData) => {
-        setData(json);
-      })
-      .catch((err: Error) => {
-        setError(err.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+  const loading = !convexUser || data === undefined;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        {error}
       </div>
     );
   }

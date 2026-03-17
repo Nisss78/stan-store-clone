@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getConvexClient } from "@/lib/convex";
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
 import { getStripe, USE_MOCK_PAYMENT, createMockCheckoutSession } from "@/lib/stripe";
 
 export async function POST(request: NextRequest) {
@@ -14,9 +16,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      include: { user: true },
+    const convex = getConvexClient();
+
+    const product = await convex.query(api.products.getById, {
+      id: productId as Id<"products">,
     });
 
     if (!product) {
@@ -36,25 +39,30 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
     // Create a pending Order record first
-    const order = await prisma.order.create({
-      data: {
-        productId: product.id,
-        userId: product.userId,
-        buyerEmail,
-        amount: product.price,
-        currency: product.currency,
-        status: "pending",
-      },
+    const order = await convex.mutation(api.orders.create, {
+      productId: product._id,
+      userId: product.userId,
+      buyerEmail,
+      amount: product.price,
+      currency: product.currency,
+      status: "pending",
     });
+
+    if (!order) {
+      return NextResponse.json(
+        { error: "注文の作成に失敗しました。" },
+        { status: 500 }
+      );
+    }
 
     // モック決済モード
     if (USE_MOCK_PAYMENT) {
-      const successUrl = `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`;
-      const cancelUrl = `${baseUrl}/checkout/cancel?order_id=${order.id}`;
-      
+      const successUrl = `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`;
+      const cancelUrl = `${baseUrl}/checkout/cancel?order_id=${order._id}`;
+
       const session = createMockCheckoutSession(
-        order.id,
-        product.id,
+        order._id,
+        product._id,
         buyerEmail,
         product.price,
         successUrl,
@@ -62,26 +70,22 @@ export async function POST(request: NextRequest) {
       );
 
       // 注文を即座に完了状態にする（モック用）
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          stripePaymentId: session.id,
-          status: "completed",
-        },
+      await convex.mutation(api.orders.updateStatus, {
+        id: order._id,
+        status: "completed",
+        stripePaymentId: session.id,
       });
 
       // 分析イベントを記録
-      await prisma.analytics.create({
-        data: {
-          userId: product.userId,
-          eventType: "purchase",
-          metadata: JSON.stringify({
-            orderId: order.id,
-            productId: product.id,
-            amount: product.price,
-            buyerEmail,
-          }),
-        },
+      await convex.mutation(api.analyticsFns.track, {
+        userId: product.userId,
+        eventType: "purchase",
+        metadata: JSON.stringify({
+          orderId: order._id,
+          productId: product._id,
+          amount: product.price,
+          buyerEmail,
+        }),
       });
 
       return NextResponse.json({ url: session.url });
@@ -107,19 +111,20 @@ export async function POST(request: NextRequest) {
           },
         },
       ],
-      success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
-      cancel_url: `${baseUrl}/checkout/cancel?order_id=${order.id}`,
+      success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`,
+      cancel_url: `${baseUrl}/checkout/cancel?order_id=${order._id}`,
       metadata: {
-        orderId: order.id,
-        productId: product.id,
+        orderId: order._id,
+        productId: product._id,
         sellerId: product.userId,
       },
     });
 
     // Store the Stripe session ID on the order
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { stripePaymentId: session.id },
+    await convex.mutation(api.orders.updateStatus, {
+      id: order._id,
+      status: "pending",
+      stripePaymentId: session.id,
     });
 
     return NextResponse.json({ url: session.url });

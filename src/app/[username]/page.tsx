@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getConvexClient } from "@/lib/convex";
+import { api } from "../../../convex/_generated/api";
 import StorefrontClient from "./storefront-client";
 
 type PageProps = {
@@ -8,10 +9,8 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps) {
   const { username } = await params;
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: { name: true, bio: true, username: true },
-  });
+  const convex = getConvexClient();
+  const user = await convex.query(api.users.getByUsername, { username });
 
   if (!user) {
     return { title: "ユーザーが見つかりません" };
@@ -25,71 +24,62 @@ export async function generateMetadata({ params }: PageProps) {
 
 export default async function StorefrontPage({ params }: PageProps) {
   const { username } = await params;
+  const convex = getConvexClient();
 
-  const user = await prisma.user.findUnique({
-    where: { username },
-    include: {
-      links: {
-        where: { isActive: true },
-        orderBy: { order: "asc" },
-      },
-      products: {
-        where: { isActive: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  const user = await convex.query(api.users.getByUsername, { username });
 
   if (!user) {
     notFound();
   }
 
-  // Record page_view analytics event (fire-and-forget, don't block render)
-  prisma.analytics
-    .create({
-      data: {
-        userId: user.id,
-        eventType: "page_view",
-        metadata: JSON.stringify({ username }),
-      },
+  const [links, products] = await Promise.all([
+    convex.query(api.links.getActiveByUserId, { userId: user._id }),
+    convex.query(api.products.getActiveByUserId, { userId: user._id }),
+  ]);
+
+  // Record page_view analytics event (fire-and-forget)
+  convex
+    .mutation(api.analyticsFns.track, {
+      userId: user._id,
+      eventType: "page_view",
+      metadata: JSON.stringify({ username }),
     })
     .catch(() => {
       // Silently fail — analytics must never break the page
     });
 
-  // Serialize data so it can be safely passed to the client component
   const serializedUser = {
-    id: user.id,
+    id: user._id,
     username: user.username,
-    name: user.name,
-    bio: user.bio,
-    avatarUrl: user.avatarUrl,
-    themeColor: user.themeColor,
-    themeName: user.themeName,
-    twitterUrl: user.twitterUrl,
-    instagramUrl: user.instagramUrl,
-    youtubeUrl: user.youtubeUrl,
-    tiktokUrl: user.tiktokUrl,
-    websiteUrl: user.websiteUrl,
+    name: user.name ?? null,
+    bio: user.bio ?? null,
+    avatarUrl: user.avatarUrl ?? null,
+    themeColor: user.themeColor ?? null,
+    themeName: user.themeName ?? null,
+    twitterUrl: user.twitterUrl ?? null,
+    instagramUrl: user.instagramUrl ?? null,
+    youtubeUrl: user.youtubeUrl ?? null,
+    tiktokUrl: user.tiktokUrl ?? null,
+    websiteUrl: user.websiteUrl ?? null,
   };
 
-  const serializedLinks = user.links.map((link) => ({
-    id: link.id,
+  const serializedLinks = links.map((link) => ({
+    id: link._id,
     title: link.title,
     url: link.url,
     order: link.order,
-    icon: link.icon,
+    icon: link.icon ?? null,
     isActive: link.isActive,
   }));
 
-  const serializedProducts = user.products.map((product) => ({
-    id: product.id,
+  const serializedProducts = products.map((product) => ({
+    id: product._id,
     title: product.title,
-    description: product.description,
+    description: product.description ?? null,
     price: product.price,
     currency: product.currency,
-    thumbnailUrl: product.thumbnailUrl,
-    fileUrl: product.fileUrl,
+    thumbnailUrl: product.thumbnailUrl ?? null,
+    fileUrl: product.fileUrl ?? null,
     isActive: product.isActive,
   }));
 

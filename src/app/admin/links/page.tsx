@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,11 +27,11 @@ import {
 } from "lucide-react";
 
 interface LinkItem {
-  id: string;
+  _id: Id<"links">;
   title: string;
   url: string;
   order: number;
-  icon: string | null;
+  icon?: string;
   isActive: boolean;
 }
 
@@ -46,32 +50,29 @@ const emptyForm: LinkFormData = {
 };
 
 export default function LinksPage() {
-  const [links, setLinks] = useState<LinkItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const links = useQuery(
+    api.links.getByUserId,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  ) as LinkItem[] | undefined;
+
+  const createLink = useMutation(api.links.create);
+  const updateLink = useMutation(api.links.update);
+  const removeLink = useMutation(api.links.remove);
+  const reorderLinks = useMutation(api.links.reorder);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
   const [formData, setFormData] = useState<LinkFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<Id<"links"> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void fetchLinks();
-  }, []);
-
-  async function fetchLinks() {
-    try {
-      const res = await fetch("/api/admin/links");
-      if (!res.ok) throw new Error("Failed to fetch links");
-      const data: LinkItem[] = await res.json();
-      setLinks(data);
-    } catch (err) {
-      console.error(err);
-      setError("リンクの取得に失敗しました");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = !convexUser || links === undefined;
 
   function openAddDialog() {
     setEditingLink(null);
@@ -95,40 +96,27 @@ export default function LinksPage() {
   }
 
   async function handleSave() {
-    if (!formData.title.trim() || !formData.url.trim()) return;
+    if (!formData.title.trim() || !formData.url.trim() || !convexUser) return;
     setSaving(true);
 
     try {
       if (editingLink) {
-        const res = await fetch(`/api/admin/links/${editingLink.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: formData.title,
-            url: formData.url,
-            icon: formData.icon || null,
-            isActive: formData.isActive,
-          }),
+        await updateLink({
+          id: editingLink._id,
+          userId: convexUser._id,
+          title: formData.title,
+          url: formData.url,
+          icon: formData.icon || undefined,
+          isActive: formData.isActive,
         });
-
-        if (!res.ok) throw new Error("Failed to update");
-        const updated: LinkItem = await res.json();
-        setLinks((prev) => prev.map((link) => (link.id === updated.id ? updated : link)));
       } else {
-        const res = await fetch("/api/admin/links", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: formData.title,
-            url: formData.url,
-            icon: formData.icon || null,
-            isActive: formData.isActive,
-          }),
+        await createLink({
+          userId: convexUser._id,
+          title: formData.title,
+          url: formData.url,
+          icon: formData.icon || undefined,
+          isActive: formData.isActive,
         });
-
-        if (!res.ok) throw new Error("Failed to create");
-        const created: LinkItem = await res.json();
-        setLinks((prev) => [...prev, created].sort((a, b) => a.order - b.order));
       }
 
       setDialogOpen(false);
@@ -140,12 +128,11 @@ export default function LinksPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: Id<"links">) {
+    if (!convexUser) return;
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/admin/links/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
-      setLinks((prev) => prev.filter((link) => link.id !== id));
+      await removeLink({ id, userId: convexUser._id });
     } catch (err) {
       console.error(err);
       setError("削除に失敗しました");
@@ -155,58 +142,35 @@ export default function LinksPage() {
   }
 
   async function handleToggleActive(link: LinkItem) {
-    const previous = links;
-    setLinks((prev) =>
-      prev.map((item) => (item.id === link.id ? { ...item, isActive: !item.isActive } : item))
-    );
-
+    if (!convexUser) return;
     try {
-      const res = await fetch(`/api/admin/links/${link.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !link.isActive }),
+      await updateLink({
+        id: link._id,
+        userId: convexUser._id,
+        isActive: !link.isActive,
       });
-
-      if (!res.ok) throw new Error("Failed to update");
     } catch (err) {
       console.error(err);
-      setLinks(previous);
       setError("更新に失敗しました");
     }
   }
 
-  async function saveOrder(nextLinks: LinkItem[]) {
-    const payload = nextLinks.map((link, index) => ({
-      id: link.id,
-      order: index,
-    }));
-
-    const res = await fetch("/api/admin/links/reorder", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) throw new Error("Failed to reorder");
-  }
-
   async function moveLink(index: number, direction: "up" | "down") {
+    if (!links || !convexUser) return;
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= links.length) return;
 
     const nextLinks = [...links];
     const [item] = nextLinks.splice(index, 1);
     nextLinks.splice(targetIndex, 0, item);
-    const normalized = nextLinks.map((link, order) => ({ ...link, order }));
-    const previous = links;
-
-    setLinks(normalized);
 
     try {
-      await saveOrder(normalized);
+      await reorderLinks({
+        userId: convexUser._id,
+        items: nextLinks.map((link, order) => ({ id: link._id, order })),
+      });
     } catch (err) {
       console.error(err);
-      setLinks(previous);
       setError("並び順の保存に失敗しました");
     }
   }
@@ -317,7 +281,7 @@ export default function LinksPage() {
         <ul className="space-y-2">
           {links.map((link, index) => (
             <li
-              key={link.id}
+              key={link._id}
               className={`flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm ${
                 link.isActive ? "" : "opacity-60"
               }`}
@@ -378,8 +342,8 @@ export default function LinksPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => void handleDelete(link.id)}
-                disabled={deletingId === link.id}
+                onClick={() => void handleDelete(link._id)}
+                disabled={deletingId === link._id}
                 className="text-destructive hover:text-destructive"
                 aria-label="削除"
               >

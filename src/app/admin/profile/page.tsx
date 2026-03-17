@@ -1,26 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-
-interface Profile {
-  id: string;
-  username: string;
-  email: string;
-  name: string | null;
-  bio: string | null;
-  avatarUrl: string | null;
-  themeColor: string;
-  themeName: string;
-  twitterUrl: string | null;
-  instagramUrl: string | null;
-  youtubeUrl: string | null;
-  tiktokUrl: string | null;
-  websiteUrl: string | null;
-}
 
 const themeOptions = [
   { value: "default", label: "デフォルト" },
@@ -31,8 +18,13 @@ const themeOptions = [
 ];
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user: clerkUser } = useUser();
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    clerkUser?.id ? { clerkId: clerkUser.id } : "skip"
+  );
+  const updateProfile = useMutation(api.users.updateProfile);
+
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -53,34 +45,21 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  async function fetchProfile() {
-    try {
-      const res = await fetch("/api/admin/profile");
-      if (!res.ok) throw new Error("Failed to fetch profile");
-      const data: Profile = await res.json();
-      setProfile(data);
+    if (convexUser) {
       setFormData({
-        name: data.name ?? "",
-        bio: data.bio ?? "",
-        avatarUrl: data.avatarUrl ?? "",
-        themeColor: data.themeColor,
-        themeName: data.themeName,
-        twitterUrl: data.twitterUrl ?? "",
-        instagramUrl: data.instagramUrl ?? "",
-        youtubeUrl: data.youtubeUrl ?? "",
-        tiktokUrl: data.tiktokUrl ?? "",
-        websiteUrl: data.websiteUrl ?? "",
+        name: convexUser.name ?? "",
+        bio: convexUser.bio ?? "",
+        avatarUrl: convexUser.avatarUrl ?? "",
+        themeColor: convexUser.themeColor,
+        themeName: convexUser.themeName,
+        twitterUrl: convexUser.twitterUrl ?? "",
+        instagramUrl: convexUser.instagramUrl ?? "",
+        youtubeUrl: convexUser.youtubeUrl ?? "",
+        tiktokUrl: convexUser.tiktokUrl ?? "",
+        websiteUrl: convexUser.websiteUrl ?? "",
       });
-    } catch (err) {
-      console.error(err);
-      setMessage({ type: "error", text: "プロフィールの取得に失敗しました" });
-    } finally {
-      setLoading(false);
     }
-  }
+  }, [convexUser]);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -90,17 +69,24 @@ export default function ProfilePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!clerkUser?.id) return;
     setSaving(true);
     setMessage(null);
 
     try {
-      const res = await fetch("/api/admin/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+      await updateProfile({
+        clerkId: clerkUser.id,
+        name: formData.name || undefined,
+        bio: formData.bio || undefined,
+        avatarUrl: formData.avatarUrl || undefined,
+        themeColor: formData.themeColor || undefined,
+        themeName: formData.themeName || undefined,
+        twitterUrl: formData.twitterUrl || undefined,
+        instagramUrl: formData.instagramUrl || undefined,
+        youtubeUrl: formData.youtubeUrl || undefined,
+        tiktokUrl: formData.tiktokUrl || undefined,
+        websiteUrl: formData.websiteUrl || undefined,
       });
-
-      if (!res.ok) throw new Error("Failed to save");
       setMessage({ type: "success", text: "プロフィールを保存しました" });
     } catch (err) {
       console.error(err);
@@ -110,7 +96,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) {
+  if (!convexUser) {
     return (
       <div className="flex items-center justify-center py-24">
         <span className="text-sm text-muted-foreground">読み込み中...</span>
@@ -123,7 +109,7 @@ export default function ProfilePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">プロフィール編集</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {profile?.username && `@${profile.username}`}
+          @{convexUser.username}
         </p>
       </div>
 

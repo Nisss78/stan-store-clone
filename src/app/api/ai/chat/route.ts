@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 // TODO: To integrate a real LLM API, replace the getMockResponse function below
 // with a call to your preferred provider. Example with OpenAI:
@@ -82,9 +81,9 @@ function getMockResponse(messages: Message[]): string {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const { userId } = await auth();
 
-  if (!session?.user?.email) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
