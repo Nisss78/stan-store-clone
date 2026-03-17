@@ -117,11 +117,9 @@ export default function AdminProfilePage() {
               <Button
                 size="sm"
                 variant="outline"
-                asChild
+                onClick={() => window.open(storeUrl, '_blank')}
               >
-                <a href={storeUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-4" />
-                </a>
+                <ExternalLink className="size-4" />
               </Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">

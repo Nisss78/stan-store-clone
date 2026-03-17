@@ -102,6 +102,7 @@ export const upsertFromClerk = mutation({
 export const updateProfile = mutation({
   args: {
     clerkId: v.string(),
+    username: v.optional(v.string()),
     name: v.optional(v.string()),
     bio: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
