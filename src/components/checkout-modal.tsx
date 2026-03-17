@@ -156,7 +156,7 @@ export function CheckoutModal({ product, username: _username, onClose }: Checkou
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button size="sm" />} >
+      <DialogTrigger render={<Button className="w-full" />} >
         購入する
       </DialogTrigger>
       {dialogContent}

@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Globe,
   Instagram,
-  ShoppingBag,
   Twitter,
   Youtube,
 } from "lucide-react";
@@ -190,7 +189,7 @@ export default function StorefrontClient({ user, links, products }: Props) {
                     isDark ? "bg-slate-800 border-slate-700" : "bg-white"
                   )}
                 >
-                  {product.thumbnailUrl ? (
+                  {product.thumbnailUrl && (
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
                       <Image
                         src={product.thumbnailUrl}
@@ -200,20 +199,10 @@ export default function StorefrontClient({ user, links, products }: Props) {
                         sizes="(max-width: 640px) 100vw, 50vw"
                       />
                     </div>
-                  ) : (
-                    <div
-                      className={cn(
-                        "flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br",
-                        theme.gradientFrom,
-                        theme.gradientTo
-                      )}
-                    >
-                      <ShoppingBag className="h-10 w-10 text-white/70" />
-                    </div>
                   )}
 
                   <div className="p-4">
-                    <h3 className="font-semibold line-clamp-1">{product.title}</h3>
+                    <h3 className="font-semibold line-clamp-2 text-base">{product.title}</h3>
                     
                     {product.description && (
                       <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
@@ -221,10 +210,13 @@ export default function StorefrontClient({ user, links, products }: Props) {
                       </p>
                     )}
 
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="font-bold">
+                    <div className="mt-3">
+                      <span className="text-lg font-bold text-primary">
                         {formatPrice(product.price, product.currency)}
                       </span>
+                    </div>
+
+                    <div className="mt-3">
                       <CheckoutModal
                         product={{
                           id: product.id,
