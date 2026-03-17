@@ -21,6 +21,8 @@ export default function AdminProfilePage() {
 
   const [showPreview, setShowPreview] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [saved, setSaved] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
@@ -49,11 +51,15 @@ export default function AdminProfilePage() {
   const handleSave = async () => {
     if (!clerkUser?.id) return;
     setSaving(true);
+    setSaved(false);
     try {
       await updateProfile({
         clerkId: clerkUser.id,
         ...formData,
       });
+      setSaved(true);
+      setPreviewKey((k) => k + 1); // Reload preview
+      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error(error);
     } finally {
@@ -210,9 +216,14 @@ export default function AdminProfilePage() {
           </CardContent>
         </Card>
 
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "保存中..." : "保存する"}
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "保存中..." : "保存する"}
+          </Button>
+          {saved && (
+            <span className="text-sm text-green-600">✓ 保存しました</span>
+          )}
+        </div>
       </div>
 
       {/* Preview (Desktop) */}
@@ -223,18 +234,27 @@ export default function AdminProfilePage() {
               <span className="text-xs font-medium text-muted-foreground">
                 プレビュー
               </span>
-              <a
-                href={storeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline"
-              >
-                新しいタブで開く
-              </a>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPreviewKey((k) => k + 1)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  更新
+                </button>
+                <a
+                  href={storeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  新しいタブで開く
+                </a>
+              </div>
             </div>
             <div className="overflow-hidden rounded-xl border bg-white shadow-lg">
               <div className="h-[600px] overflow-y-auto">
                 <iframe
+                  key={previewKey}
                   src={storeUrl}
                   className="w-full h-full border-0"
                   title="プレビュー"
