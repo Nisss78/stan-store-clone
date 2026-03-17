@@ -3,6 +3,10 @@ import { getConvexClient } from "@/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import StorefrontClient from "./storefront-client";
 
+// Force dynamic rendering to avoid cache issues
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type PageProps = {
   params: Promise<{ username: string }>;
 };
