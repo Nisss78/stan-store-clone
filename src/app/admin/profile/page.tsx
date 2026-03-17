@@ -436,37 +436,6 @@ export default function AdminProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Product Layout */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">商品レイアウト</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { id: "standard", name: "スタンダード", desc: "画像と情報を縦並び" },
-                { id: "compact", name: "コンパクト", desc: "横並びで省スペース" },
-                { id: "minimal", name: "ミニマル", desc: "画像なしでシンプル" },
-                { id: "featured", name: "フィーチャード", desc: "大型で目立つ表示" },
-              ].map((layout) => (
-                <button
-                  key={layout.id}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, productLayout: layout.id })}
-                  className={`rounded-lg border-2 p-3 text-left transition-all ${
-                    formData.productLayout === layout.id
-                      ? "border-primary bg-primary/5"
-                      : "border-muted hover:border-muted-foreground/50"
-                  }`}
-                >
-                  <p className="font-medium text-sm">{layout.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{layout.desc}</p>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="flex items-center gap-4">
           <Button onClick={() => handleSave(false)} disabled={saving || !isDirty}>
             {saving ? "保存中..." : "保存する"}

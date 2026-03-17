@@ -454,18 +454,42 @@ export default function AdminProductsPage() {
     api.products.getByUserId,
     convexUser?._id ? { userId: convexUser._id } : "skip"
   ) as Product[] | undefined;
+  const updateProfile = useMutation(api.users.updateProfile);
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [previewKey, setPreviewKey] = useState(0);
+  const [productLayout, setProductLayout] = useState<string>("compact");
 
   const storeUrl = convexUser
     ? `${window.location.origin}/${convexUser.username}`
     : "";
 
   const loading = !convexUser || products === undefined;
+
+  // Initialize productLayout from user data
+  useEffect(() => {
+    if (convexUser?.productLayout) {
+      setProductLayout(convexUser.productLayout);
+    }
+  }, [convexUser]);
+
+  // Save layout when changed
+  const handleLayoutChange = async (layout: string) => {
+    if (!clerkUser?.id) return;
+    setProductLayout(layout);
+    try {
+      await updateProfile({
+        clerkId: clerkUser.id,
+        productLayout: layout,
+      });
+      setPreviewKey((k) => k + 1);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handleSaved = useCallback(() => {
     setPreviewKey((k) => k + 1);
@@ -505,6 +529,29 @@ export default function AdminProductsPage() {
               追加
             </Button>
           </div>
+        </div>
+
+        {/* Product Layout Selection */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-muted-foreground">レイアウト:</span>
+          {[
+            { id: "compact", name: "コンパクト" },
+            { id: "minimal", name: "ミニマル" },
+            { id: "featured", name: "フィーチャード" },
+          ].map((layout) => (
+            <button
+              key={layout.id}
+              type="button"
+              onClick={() => handleLayoutChange(layout.id)}
+              className={`rounded-full px-3 py-1 text-sm transition-all ${
+                productLayout === layout.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+            >
+              {layout.name}
+            </button>
+          ))}
         </div>
 
         {/* Empty state */}
