@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { ExternalLink, Eye, EyeOff, Copy, Check, Camera, X, Save } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Copy, Check, Camera, X, Save, Palette } from "lucide-react";
 import { toast } from "sonner";
+import { getThemesByCategory } from "@/lib/themes";
 
 export default function AdminProfilePage() {
   const { user: clerkUser, isLoaded } = useUser();
@@ -32,7 +33,7 @@ export default function AdminProfilePage() {
     name: "",
     bio: "",
     avatarUrl: "",
-    productLayout: "standard",
+    themeName: "minimal",
     twitterUrl: "",
     instagramUrl: "",
     youtubeUrl: "",
@@ -53,7 +54,7 @@ export default function AdminProfilePage() {
         name: convexUser.name || "",
         bio: convexUser.bio || "",
         avatarUrl: convexUser.avatarUrl || "",
-        productLayout: convexUser.productLayout || "standard",
+        themeName: convexUser.themeName || "minimal",
         twitterUrl: convexUser.twitterUrl || "",
         instagramUrl: convexUser.instagramUrl || "",
         youtubeUrl: convexUser.youtubeUrl || "",
@@ -433,6 +434,52 @@ export default function AdminProfilePage() {
                 placeholder="https://your-website.com"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Theme Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              テーマデザイン
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {Object.entries(getThemesByCategory()).map(([category, categoryThemes]) => (
+              <div key={category}>
+                <h4 className="text-sm font-medium text-muted-foreground mb-3 capitalize">
+                  {category === "minimal" && "ミニマル"}
+                  {category === "vibrant" && "バイブラント"}
+                  {category === "dark" && "ダーク"}
+                  {category === "creative" && "クリエイティブ"}
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {categoryThemes.map((theme) => (
+                    <button
+                      key={theme.name}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, themeName: theme.name })}
+                      className={`relative rounded-xl overflow-hidden transition-all hover:scale-[1.02] ${
+                        formData.themeName === theme.name
+                          ? "ring-2 ring-primary ring-offset-2"
+                          : "border border-muted"
+                      }`}
+                    >
+                      <div className={`h-16 ${theme.previewGradient}`} />
+                      <div className="p-2 bg-white">
+                        <p className="text-xs font-medium text-left">{theme.label}</p>
+                      </div>
+                      {formData.themeName === theme.name && (
+                        <div className="absolute top-2 right-2 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
+                          <Check className="h-3 w-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
